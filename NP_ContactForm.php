@@ -28,10 +28,6 @@ class NP_ContactForm extends NucleusPlugin
 		return array(
 			'PrePluginOptionsEdit'
 		);
-	}
-
-	function init() {
-		
 	}		
 
     function install()
@@ -63,28 +59,25 @@ class NP_ContactForm extends NucleusPlugin
 		$this->deleteOption("debug");
 	}
 
-	function doItemVar($data, $param)
-	{
-		
-	}
-
 	function event_PrePluginOptionsEdit($data)
 	{		
-		$data['options'][48]['extra'] = 
-			'<script type="text/javascript">' .
-			'var rows = document.getElementsByTagName("tr");' .
-			'var list = rows[1].getElementsByTagName("select");' .
-			'var selection = list[0].options[list[0].selectedIndex].value;' .
-			//'rows.item(1).style.display = "none";' .
-			'</script>';	
+		// get option IDs of selected form elements
+		$context = $data['context'];
+		$optionNames = array('method','host','username','password','debug');
+		$oid = array();
+		foreach ($optionNames as $name) {
+			array_push($oid, $this->_getOID($context, $name));
+		}
 		
+		// add JavaScript to hide some form elements on changing dorpmenu
+		$data['options'][$oid[0]]['extra'] =  
+			'<script src="plugins/contactform/contactform.js"></script>';	
+
 		// For logging (delete later)
 		include '/contactform/Logging.php';
 		$log = new Logging();
-		$log->lfile($DIR_NUCLEUS . '/log.txt');
-		$contents = print_r($data, true);
-		$log->lwrite($contents);
-		//$log->lwrite($oid);
+		$log->lfile($DIR_NUCLEUS . 'plugins/contactform/log');
+		//$log->lwrite($data);
 		$log->lclose();
 		// End logging
 	}
