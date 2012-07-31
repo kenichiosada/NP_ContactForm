@@ -66,7 +66,7 @@ class NP_ContactForm extends NucleusPlugin
 	{		
 		// get option IDs of selected form elements
 		$context = $data['context'];
-		$optionNames = array('method','host','username','password','debug');
+		$optionNames = array('method','form');
 		$oid = array();
 		foreach ($optionNames as $name) {
 			array_push($oid, $this->_getOID($context, $name));
@@ -75,6 +75,14 @@ class NP_ContactForm extends NucleusPlugin
 		// add JavaScript to hide some form elements on changing dorpmenu
 		$data['options'][$oid[0]]['extra'] =  
 			'<script src="plugins/contactform/contactform.js"></script>';
+
+		// validate form code entered by a user
+		$userform = trim($data['options'][$oid[1]]['value']);
+		if ($userform != '') {
+			$errormsg = $this->validate($userform);			
+			$data['options'][$oid[1]]['extra'] = $errormsg;
+		}
+	
 	}
 	
 	function doItemVar(&$item, $param)
@@ -212,6 +220,44 @@ EOT;
 			</style>
 EOT;
 		return $css;
+	}
+	
+	// function to validate form code entered by a user
+	// user HTMLPurifier in future for more advanced filtering
+	function validate($userform)
+	{	
+		$errormsg = '';
+		
+		// match form elements
+		preg_match_all('/(<)((input|textarea|select|button)).*?(>)/', $userform, $matches);
+		$numfield = count($matches[0]); // number of allowed form elements
+		// match submit buttons	
+		preg_match_all('/(<)(input|button).*?type=("|\')submit("|\').*?(>)/', $userform, $matches);
+		$numsubmit = count($matches[0]); // number of submit buttons
+		if ($numsubmit>0){
+			$numfield = $numfield - $numsubmit;
+			$errormsg .= 
+				'Do not include submit buttons.<br />' . "\r\n";
+		}
+		// match name attribute
+		preg_match_all('/(name)(=)(("|\').*?("|\'))/', $userform, $matches);
+		$numname = count($matches[0]); // number of name attribute
+		if ($numfield != $numname ) {
+			$errormsg .=  
+				'Please make sure to add name attribute to each form element.<br />' . "\r\n";
+		}
+		// check if code include <form>
+		preg_match_all('/(<)(form).*?(>)|(<\/form>)/', $userform, $matches);
+		if (count($matches[0])>0){
+			$errormsg .= 'Do not include &lt;form&gt; tag.<br />' . "\r\n"; 
+		}
+		// make error message colorful
+		if (strlen($errormsg) > 0 ){
+			$errormsg = '<div style="color:#FF0000;">' . $errormsg;
+			$errormsg .= '</div>';
+		}
+
+		return $errormsg;
 	}
 	
 } 
