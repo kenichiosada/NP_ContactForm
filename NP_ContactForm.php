@@ -82,33 +82,50 @@ class NP_ContactForm extends NucleusPlugin
 			$errormsg = $this->validate($userform);			
 			$data['options'][$oid[1]]['extra'] = $errormsg;
 		}
-	
 	}
 	
 	function doItemVar(&$item, $param)
 	{	
 		if (!isset($_POST['submit'])){
-			
-			// Show form
-			// Use user code for a form, if a user has set it through plugin option page,
-			// else use default code for a form, a code which defined in addForm().
-			$form =  '<form name="contactform" id="contactform" method="post" action="' 
-					 . createItemLink($item->itemid) . '" onsubmit="return showProcess();">' ."\r\n";
-			$userform = trim($this->getOption("form"));
-			if ($userform != '') {
-				$form .= $userform;
-				$postvar = implode(',', $this->grabNameAttr($userform));
-				$form .= '<input type="hidden" value="' . $postvar . '" name="postvar" />';
-			} else {
-				$form .= $this->addForm();
-			}
-			$form .= '</form>' . "\r\n"
-					 . '<div id="other" class="hidePane">Processing...</div>' . "\r\n";		
-			
-			echo $form . $this->addJs() . $this->addCss() . "\r\n";
-
+			$this->showForm($item->itemid);
 		} else {
 
+			// Validate user input
+			// Display error message if necessary fields are 
+			if (isset($_POST['postvar'])) {
+				$postvar = explode(',', $_POST['postvar']);
+			}
+			if (isset($_POST['required'])) {
+				$required = explode(',', $_POST['required']);
+			}			
+			
+			$error_input = array();
+
+			foreach ($postvar as $input) {
+				if (in_array($input, $required)) {
+					if (empty($_POST[$input])){ 
+						array_push($error_input, $input);
+					}
+					/*
+					if ($input = 'email') {
+						validEmail($this->clean_var($_POST['email']));
+					}
+					 */
+				}
+			}
+
+			if (count($error_input) > 0){
+				$this->showForm();
+				foreach ($error_input as $input) {
+				$addstyle = '<script type="text/javascript">'
+						  . 'document.getElementsByName("' . $input . '")'
+						  . '.style.setAttribute("border", "1px solid #FF0000")'
+						  . '</script>';
+				}
+			}
+
+			
+			
 			// Create message to be sent.
 			$message = "";
 			if (isset($_POST['postvar'])) {
@@ -117,10 +134,11 @@ class NP_ContactForm extends NucleusPlugin
 					$message .= "$var: $_POST[$var]\r\n\r\n";
 				}
 			} else {
-				$message = $_POST['message'];
+				$message = 'Name: ' . $_POST['name'] . "\r\n" 
+						 . 'Email: ' . $_POST['email'] . "\r\n"
+						 . 'Message: ' . "\r\n"
+						 . $_POST['message'] . "\r\n";
 			}
-
-			echo $message;
 			
 		}
 		
@@ -151,6 +169,13 @@ class NP_ContactForm extends NucleusPlugin
 				break;
 		}
 		 */
+	}
+	
+
+	// clean up user input
+	function clean_var($variable) {
+    	$variable = strip_tags(stripslashes(trim(rtrim($variable))));
+  		return $variable;
 	}
 
 	// return code for displaying default form
@@ -226,6 +251,29 @@ EOT;
 		return $css;
 	}
 	
+	// Show form
+	// Use user code for a form, if a user has set it through plugin option page,
+	// else use default code for a form, a code which defined in addForm().
+	function showForm($itemid) 
+	{
+		$form = '<form name="contactform" id="contactform" method="post" action="' 
+			  . createItemLink($itemid) . '" onsubmit="return showProcess();">' ."\r\n";
+		$userform = trim($this->getOption("form"));
+		if ($userform != '') {
+			$form .= $userform;
+			$postvar = implode(',', $this->grabNameAttr($userform));
+			$form .= '<input type="hidden" value="' . $postvar . '" name="postvar" />';
+			$required = implode(',', $this->grabRequired($userform, $postvar));
+			$form .= '<input type="hidden" value="' . $required . '" name="required" />';			
+		} else {
+			$form .= $this->addForm();
+		}
+		$form .= '</form>' . "\r\n"
+			   . '<div id="other" class="hidePane">Processing...</div>' . "\r\n";		
+		
+		echo $form . $this->addJs() . $this->addCss() . "\r\n";
+	}
+
 	// function to validate form code entered by a user
 	// user HTMLPurifier in future for more advanced filtering
 	// It takes a code entred by a user and returns error message. (empty if no error)
@@ -236,19 +284,8 @@ EOT;
 		preg_match_all('/(<)((input|textarea|select|button)).*?(>)/', $userform, $matches);
 		$numfield = count($matches[0]); // number of allowed form elements
 		
-		// match submit buttons	
-		/*
-		preg_match_all('/(<)(input|button).*?type=("|\')submit("|\').*?(>)/', $userform, $matches);
-		$numsubmit = count($matches[0]); // number of submit buttons
-		if ($numsubmit>0){
-			$numfield = $numfield - $numsubmit;
-			$errormsg .= 
-				'Do not include submit buttons.<br />' . "\r\n";
-		}
-		*/
-
 		// match name attribute
-		preg_match_all('/(name)(=)(("|\').*?("|\'))/', $userform, $matches);
+		preg_match_all('/(name=("|\').*?("|\'))/', $userform, $matches);
 		$numname = count($matches[0]); // number of name attribute
 		if ($numfield != $numname ) {
 			$errormsg .=  
@@ -271,7 +308,7 @@ EOT;
 	// Returns an array of attributes to be used in $_POST. 
 	function grabNameAttr($code)
 	{
-		preg_match_all('/(name)(=)(("|\').*?("|\'))/', $code, $matches);
+		preg_match_all('/(name=("|\').*?("|\'))/', $code, $matches);
 
 		$attributes = array();
 		$pattern = array('/("|\')/','/name=/');		
@@ -284,4 +321,66 @@ EOT;
 		}
 		return $attributes;
 	}
+
+	// Grab form element with class name 'required'.
+	// Returns an array of names to be used in $_POST. 
+	function grabRequired($code,$postvar)
+	{
+		preg_match_all('/(<).*(class=("|\')required("|\')).*(>)/', $code, $matches);
+		$tags = implode(" ", $matches[0]);	
+		$required = $this->grabNameAttr($tags);
+		return $required;
+	}
+	
+	// Validate email
+	// Takes email address and retruns boolean for validity.
+	// Thanks to http://www.easyphpcontactform.com and
+	// http://www.linuxjournal.com/article/9585
+	function validEmail($email)
+	{
+		$isValid = true;
+		$atIndex = strrpos($email, "@");
+		if (is_bool($atIndex) && !$atIndex) {
+			$isValid = false;
+		} else {
+			$domain = substr($email, $atIndex+1);
+			$local = substr($email, 0, $atIndex);
+			$localLen = strlen($local);
+			$domainLen = strlen($domain);
+			if ($localLen < 1 || $localLen > 64) {
+				// local part length exceeded
+				$isValid = false;
+			} else if ($domainLen < 1 || $domainLen > 255) {
+				// domain part length exceeded
+				$isValid = false;
+			} else if ($local[0] == '.' || $local[$localLen-1] == '.') {
+				// local part starts or ends with '.'
+				$isValid = false;
+			} else if (preg_match('/\\.\\./', $local)) {
+				// local part has two consecutive dots
+				$isValid = false;
+			} else if (!preg_match('/^[A-Za-z0-9\\-\\.]+$/', $domain)) {
+				// character not valid in domain part
+				$isValid = false;
+			} else if (preg_match('/\\.\\./', $domain)) {
+				// domain part has two consecutive dots
+				$isValid = false;
+			} else if (!preg_match('/^(\\\\.|[A-Za-z0-9!#%&`_=\\/$\'*+?^{}|~.-])+$/', 
+				str_replace("\\\\","",$local))) {
+				// character not valid in local part unless 
+				// local part is quoted
+				if (!preg_match('/^"(\\\\"|[^"])+"$/', str_replace("\\\\","",$local))) {
+					$isValid = false;
+				}
+			}
+			if ($isValid && function_exists('checkdnsrr')){
+				if (!(checkdnsrr($domain,"MX") || checkdnsrr($domain,"A"))) {
+					// domain not found in DNS
+					$isValid = false;
+				}
+			}
+		}
+		return $isValid;
+	} // end validEmail()
+
 } 
