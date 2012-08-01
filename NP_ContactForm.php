@@ -87,48 +87,55 @@ class NP_ContactForm extends NucleusPlugin
 	
 	function doItemVar(&$item, $param)
 	{	
-		// beginning of form code
-		$form =  '<form name="contactform" id="contactform" method="post" action="' 
-				 . createItemLink($item->itemid) . '" onsubmit="return showProcess();">' ."\r\n";
-
-		// Use user code for a form, if a user has set it through plugin option page
-		// else use default code for a form, a code which defined in addForm().
-		$userform = trim($this->getOption("form"));
-		if($userform != ''){
-
-			// Validate user's code
-			preg_match_all('/(<)((input|textarea)).*?(>)/', $userform, $matches);
-			$numfield = count($matches[0]); // number of allowed form elements
-
-			preg_match_all('/(name)(=)(".*?")/', $userform, $matches);
-			$numname = count($matches[0]); // number of name attribute
+		if (!isset($_POST['submit'])){
 			
-			print_r($matches);
+			// Show form
+			// Use user code for a form, if a user has set it through plugin option page,
+			// else use default code for a form, a code which defined in addForm().
+			$form =  '<form name="contactform" id="contactform" method="post" action="' 
+					 . createItemLink($item->itemid) . '" onsubmit="return showProcess();">' ."\r\n";
+			$userform = trim($this->getOption("form"));
+			if ($userform != '') {
+				$form .= $userform;
+				$postvar = implode(',', $this->grabNameAttr($userform));
+				$form .= '<input type="hidden" value="' . $postvar . '" name="postvar" />';
+			} else {
+				$form .= $this->addForm();
+			}
+			$form .= '</form>' . "\r\n"
+					 . '<div id="other" class="hidePane">Processing...</div>' . "\r\n";		
 			
+			echo $form . $this->addJs() . $this->addCss() . "\r\n";
+
 		} else {
+
+			// Create message to be sent.
+			$message = "";
+			if (isset($_POST['postvar'])) {
+				$postvar = explode(',', $_POST['postvar']);
+				foreach ($postvar as $var) {
+					$message .= "$var: $_POST[$var]\r\n\r\n";
+				}
+			} else {
+				$message = $_POST['message'];
+			}
+
+			echo $message;
 			
 		}
-
-
-		$form .= $userform;
-		$form .= $this->addForm();
 		
 		
-		// end of form code
-		$form .= '<div class="submit"><button type="submit">Submit</button></div>'
-				 . '</form>' . "\r\n"
-				 . '<div id="other" class="hidePane">Processing...</div>' . "\r\n";
-
-		
-		
-		echo $form . $this->addJs() . $this->addCss() . "\r\n";
-
 		
 
+		
+		 
 
+		/*
+		 * Send email message according to a method set on plugin option page. 
+		 */
+		/*	
 		$method = $this->getOption("method");
 		
-		/*
 		switch ($method) {
 			case 0:
 				sendMail();
@@ -143,10 +150,6 @@ class NP_ContactForm extends NucleusPlugin
 				sendMail();
 				break;
 		}
-		 */
-		
-		/*
-		
 		 */
 	}
 
@@ -169,6 +172,7 @@ class NP_ContactForm extends NucleusPlugin
 				<textarea name="message" id="message" cols="30" rows="10"></textarea>
 			</div>
 			</fieldset>
+			<div class="submit"><button type="submit" name="submit">Submit</button></div>
 EOT;
 		return $formcode;
 	}
@@ -224,14 +228,16 @@ EOT;
 	
 	// function to validate form code entered by a user
 	// user HTMLPurifier in future for more advanced filtering
+	// It takes a code entred by a user and returns error message. (empty if no error)
 	function validate($userform)
 	{	
 		$errormsg = '';
-		
 		// match form elements
 		preg_match_all('/(<)((input|textarea|select|button)).*?(>)/', $userform, $matches);
 		$numfield = count($matches[0]); // number of allowed form elements
+		
 		// match submit buttons	
+		/*
 		preg_match_all('/(<)(input|button).*?type=("|\')submit("|\').*?(>)/', $userform, $matches);
 		$numsubmit = count($matches[0]); // number of submit buttons
 		if ($numsubmit>0){
@@ -239,6 +245,8 @@ EOT;
 			$errormsg .= 
 				'Do not include submit buttons.<br />' . "\r\n";
 		}
+		*/
+
 		// match name attribute
 		preg_match_all('/(name)(=)(("|\').*?("|\'))/', $userform, $matches);
 		$numname = count($matches[0]); // number of name attribute
@@ -256,8 +264,24 @@ EOT;
 			$errormsg = '<div style="color:#FF0000;">' . $errormsg;
 			$errormsg .= '</div>';
 		}
-
 		return $errormsg;
 	}
-	
+
+	// Grab name attributes from a code entered by a user.
+	// Returns an array of attributes to be used in $_POST. 
+	function grabNameAttr($code)
+	{
+		preg_match_all('/(name)(=)(("|\').*?("|\'))/', $code, $matches);
+
+		$attributes = array();
+		$pattern = array('/("|\')/','/name=/');		
+		
+		foreach ($matches[0] as $match){
+			$attr = preg_replace($pattern, '', $match);
+			if ($attr != 'submit') {
+				array_push($attributes, $attr);
+			}
+		}
+		return $attributes;
+	}
 } 
