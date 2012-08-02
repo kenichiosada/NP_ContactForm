@@ -113,36 +113,6 @@ class NP_ContactForm extends NucleusPlugin
   		return $variable;
 	}
 
-
-
-
-
-	// return code for displaying default form
-	/*
-	function addForm()
-	{
-		$formcode = <<<EOT
-			<fieldset>
-			<legend>Contact Us</legend>
-			<div>
-				<label for="name">Name</label> 
-				<input name="name" id="name" size="30" type="text">
-			</div>
-			<div>
-				<label for="email">Email</label>
-				<input name="email" id="email" size="30" type="text">
-			</div>			
-			<div>
-				<label for="message">Message</label>
-				<textarea name="message" id="message" cols="30" rows="10"></textarea>
-			</div>
-			</fieldset>
-			<div class="submit"><button type="submit" name="submit">Submit</button></div>
-EOT;
-		return $formcode;
-	}
-	*/
-
 	// returns JavaScript for displaying 'processing...' message
 	function addJs()
 	{
@@ -196,14 +166,11 @@ EOT;
 	// Generate HTML code for a contact form based on custom markups entered by a user. 
 	// Return true is succeed.
 	//
-	// array key settings: 0=name, 1=type, 2=default, 3=required, 4=option
-	//
 	function showForm($markup, $itemid)
 	{
-		
 		// Store markup information in an array
 		$settings = array();
-		$a_keys = array('name', 'type', 'default', 'required', 'option');
+		$a_keys = array('type', 'name', 'required', 'option');
 		preg_match_all('/\[%\(.*%\]/', $markup, $matches);
 		foreach ($matches as $match) {
 			$pattern = array('/\[%\(/', '/\)%\]/');
@@ -222,30 +189,44 @@ EOT;
 		// Create HTML tag based on markup information
 		$i = 0;
 		foreach ($settings as $setting) {
-			switch ($setting['type']) {
-				case 'text':
-					$setting['tag'] = 
-						'<input type="text" name="'.$setting['name'].'" id="'.$setting['name'].'" />';
-					break;
-				case 'checkbox':
-					break;
-				case 'radio':
-					break;
-				case 'select':
-					break;
-				case 'textarea':
-					break;
-				case 'submit':
-					break;
-				default:
-					break;
+			if ($setting['type'] == 'text') {
+				$tag = '<input type="text" name="' . $setting['name'] . '" id="' . $setting['name'];
+				if (isset($setting['option'])) {
+					$tag .= '" value = "' . $setting['option'];
+				}
+				$tag .= '" />';
+			} elseif ($setting['type'] == 'checkbox' || $setting['type'] == 'radio') {
+				$options = explode('|', $setting['option']);
+				$optid = 1;
+				foreach ($options as $option) {
+					$tag .= '<input type="checkbox" ' 
+						 . 'name="' . $setting['name'] . '" '
+						 . 'id="' . $setting['name'] . $optid . '" ' 
+						 . 'value="' . $option . '" />' . "\r\n";
+					$optid++;
+				}
+			} elseif ($setting['type'] == 'select') {
+				$tag = '<select name="' . $setting['name'] . '" id="' . $setting['name'] . '">' . "\r\n";
+				preg_match_all('/[a-zA-Z0-9]+\|+?[a-zA-Z0-9]+/', $setting['option'], $matches);
+				foreach ($matches[0] as $match) {
+					$option = explode('|', $match);
+					$option = explode('|', $match);
+					$tag .= '<option value="' . $option[1] . '">' . $option[0] . '</option>' . "\r\n";
+				}
+				$tag .= '</select>' . "\r\n";
+			} elseif ($setting['type'] == 'textarea') {
+				$tag = '<textarea name="' . $setting['name'] . '" id="' . $setting['name'] .'">' . $setting['option'] . '</textarea>';
+			} elseif ($setting['type'] == 'submit') {
+				$tag = '<input type="submit" name="submit" id="submit" value="' . $setting['name'] . '" />"' . "\r\n";
+			} else {
+				$tag = '';
 			}
+			$setting['tag'] = $tag;
 			$settings[$i] = $setting;
 			$i++;
 		}
 		print_r($settings);
 	}
-
 
 
 
