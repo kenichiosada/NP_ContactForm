@@ -75,83 +75,19 @@ class NP_ContactForm extends NucleusPlugin
 		// add JavaScript to hide some form elements on changing dorpmenu
 		$data['options'][$oid[0]]['extra'] =  
 			'<script src="plugins/contactform/contactform.js"></script>';
-
-		// validate form code entered by a user
-		$userform = trim($data['options'][$oid[1]]['value']);
-		if ($userform != '') {
-			$errormsg = $this->validate($userform);			
-			$data['options'][$oid[1]]['extra'] = $errormsg;
-		}
 	}
 	
 	function doItemVar(&$item, $param)
 	{	
 		if (!isset($_POST['submit'])){
-			$this->showForm($item->itemid);
+			$this->showForm($this->getOption('form'), $item->itemid);
 		} else {
-
-			// Validate user input
-			// Display error message if necessary fields are 
-			if (isset($_POST['postvar'])) {
-				$postvar = explode(',', $_POST['postvar']);
-			}
-			if (isset($_POST['required'])) {
-				$required = explode(',', $_POST['required']);
-			}			
-			
-			$error_input = array();
-
-			foreach ($postvar as $input) {
-				if (in_array($input, $required)) {
-					if (empty($_POST[$input])){ 
-						array_push($error_input, $input);
-					}
-					/*
-					if ($input = 'email') {
-						validEmail($this->clean_var($_POST['email']));
-					}
-					 */
-				}
-			}
-
-			if (count($error_input) > 0){
-				$this->showForm();
-				foreach ($error_input as $input) {
-				$addstyle = '<script type="text/javascript">'
-						  . 'document.getElementsByName("' . $input . '")'
-						  . '.style.setAttribute("border", "1px solid #FF0000")'
-						  . '</script>';
-				}
-			}
-
-			
-			
-			// Create message to be sent.
-			$message = "";
-			if (isset($_POST['postvar'])) {
-				$postvar = explode(',', $_POST['postvar']);
-				foreach ($postvar as $var) {
-					$message .= "$var: $_POST[$var]\r\n\r\n";
-				}
-			} else {
-				$message = 'Name: ' . $_POST['name'] . "\r\n" 
-						 . 'Email: ' . $_POST['email'] . "\r\n"
-						 . 'Message: ' . "\r\n"
-						 . $_POST['message'] . "\r\n";
-			}
-			
+			echo "submitted";
+			$this->showForm($this->getOption('form'), $item->itemid);
 		}
 		
-		
-		
-
-		
-		 
-
 		/*
-		 * Send email message according to a method set on plugin option page. 
-		 */
-		/*	
+		//Send email message according to a method set on plugin option page. 
 		$method = $this->getOption("method");
 		
 		switch ($method) {
@@ -168,9 +104,8 @@ class NP_ContactForm extends NucleusPlugin
 				sendMail();
 				break;
 		}
-		 */
+		*/
 	}
-	
 
 	// clean up user input
 	function clean_var($variable) {
@@ -178,7 +113,12 @@ class NP_ContactForm extends NucleusPlugin
   		return $variable;
 	}
 
+
+
+
+
 	// return code for displaying default form
+	/*
 	function addForm()
 	{
 		$formcode = <<<EOT
@@ -201,6 +141,7 @@ class NP_ContactForm extends NucleusPlugin
 EOT;
 		return $formcode;
 	}
+	*/
 
 	// returns JavaScript for displaying 'processing...' message
 	function addJs()
@@ -250,7 +191,66 @@ EOT;
 EOT;
 		return $css;
 	}
-	
+
+	// Show form
+	// Generate HTML code for a contact form based on custom markups entered by a user. 
+	// Return true is succeed.
+	//
+	// array key settings: 0=name, 1=type, 2=default, 3=required, 4=option
+	//
+	function showForm($markup, $itemid)
+	{
+		
+		// Store markup information in an array
+		$settings = array();
+		$a_keys = array('name', 'type', 'default', 'required', 'option');
+		preg_match_all('/\[%\(.*%\]/', $markup, $matches);
+		foreach ($matches as $match) {
+			$pattern = array('/\[%\(/', '/\)%\]/');
+			$stripped = preg_replace($pattern, '', $match);
+			foreach ( $stripped as $set) {
+				$a_value = explode(',',$set);
+				$i = 0;
+				foreach ( $a_keys as $key ) {
+					$setting[$key] = $a_value[$i];
+					$i++;
+				}
+				array_push($settings, $setting);	
+			}
+		}
+
+		// Create HTML tag based on markup information
+		$i = 0;
+		foreach ($settings as $setting) {
+			switch ($setting['type']) {
+				case 'text':
+					$setting['tag'] = 
+						'<input type="text" name="'.$setting['name'].'" id="'.$setting['name'].'" />';
+					break;
+				case 'checkbox':
+					break;
+				case 'radio':
+					break;
+				case 'select':
+					break;
+				case 'textarea':
+					break;
+				case 'submit':
+					break;
+				default:
+					break;
+			}
+			$settings[$i] = $setting;
+			$i++;
+		}
+		print_r($settings);
+	}
+
+
+
+
+
+	/*
 	// Show form
 	// Use user code for a form, if a user has set it through plugin option page,
 	// else use default code for a form, a code which defined in addForm().
@@ -273,7 +273,9 @@ EOT;
 		
 		echo $form . $this->addJs() . $this->addCss() . "\r\n";
 	}
-
+	 */
+	
+	/*
 	// function to validate form code entered by a user
 	// user HTMLPurifier in future for more advanced filtering
 	// It takes a code entred by a user and returns error message. (empty if no error)
@@ -303,6 +305,7 @@ EOT;
 		}
 		return $errormsg;
 	}
+	*/
 
 	// Grab name attributes from a code entered by a user.
 	// Returns an array of attributes to be used in $_POST. 
