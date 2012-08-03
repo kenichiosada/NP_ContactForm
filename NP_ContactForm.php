@@ -81,10 +81,6 @@ class NP_ContactForm extends NucleusPlugin
 	{	
 		$settings = $this->readMarkup($this->getOption('form'));
 
-		//print_r($settings);
-
-		
-
 		$error = 0;	
 		$errornum = array();
 
@@ -119,10 +115,6 @@ class NP_ContactForm extends NucleusPlugin
 				$elementnum++;
 			}
 
-			print_r($_POST);
-			print_r($settings);
-			print_r($errornum);
-			
 			if ($error == 1) {
 				$settings = $this->generateTags($settings);
 				foreach ($errornum as $num) {
@@ -222,19 +214,21 @@ class NP_ContactForm extends NucleusPlugin
 				}
 				$tag .= '" />';
 			} elseif ($setting['type'] == 'checkbox' || $setting['type'] == 'radio') {
-				$options = explode('|', $setting['option']);
-				$optid = 1;
+				preg_match_all('/[a-zA-Z0-9\s]+\|+?[a-z-A-Z0-9\s]+/', $setting['option'], $matches);
 				$tag = '';
-				foreach ($options as $option) {
+				foreach ($matches[0] as $match) {		
+					$options = explode('|', $match);
+					$optid = 1;
 					$tag .= '<input type="' . $setting['type'] . '" ' 
 						 . 'name="' . $setting['name'] . '" '
 						 . 'id="' . $setting['name'] . $optid . '" ' 
-						 . 'value="' . $option . '" />' . "\r\n";
+						 . 'value="' . $options[1] . '" /> ' . $options[0] . "<br />" 
+						 . "\r\n";
 					$optid++;
 				}
 			} elseif ($setting['type'] == 'select') {
 				$tag = '<select name="' . $setting['name'] . '" id="' . $setting['name'] . '">' . "\r\n";
-				preg_match_all('/[a-zA-Z0-9]+\|+?[a-zA-Z0-9]+/', $setting['option'], $matches);
+				preg_match_all('/[a-zA-Z0-9\s]+\|+?[a-zA-Z0-9\s]+/', $setting['option'], $matches);
 				foreach ($matches[0] as $match) {
 					$option = explode('|', $match);
 					$tag .= '<option value="' . $option[1] . '">' . $option[0] . '</option>' . "\r\n";
