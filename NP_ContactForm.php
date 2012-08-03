@@ -79,18 +79,73 @@ class NP_ContactForm extends NucleusPlugin
 	
 	function doItemVar(&$item, $param)
 	{	
-		if (!isset($_POST['submit'])){
-			$this->showForm($this->getOption('form'), $item->itemid);
-		} else {
-			echo "submitted";
-			$this->showForm($this->getOption('form'), $item->itemid);
-		}
+		$settings = $this->readMarkup($this->getOption('form'));
+
+		//print_r($settings);
+
 		
+
+		$error = 0;	
+		$errornum = array();
+
+		if (!isset($_POST['submit'])){	
+			$this->showForm($item->itemid, $settings, $extra);
+		} else {
+			$elementnum = 0;
+			
+			foreach ($settings as $setting) {
+				$name = $setting['name'];
+				
+				// Remove default value from $_POST
+				if ($_POST[$name] == $setting['option']) {
+					unset($_POST[$name]);
+				}
+				
+				// Switch form's default value with user inputs
+				if ($setting['type'] == 'text' || $setting['type'] == 'textarea') {
+					if (array_key_exists($name,$_POST)) {
+						$settings[$elementnum]['option'] = htmlspecialchars($_POST[$name], ENT_QUOTES);
+					}
+				}
+				
+				// Check for required field
+				if ($setting['required'] == 1) {					
+					if (array_key_exists($name, $_POST) == false) {
+						array_push($errornum, $elementnum);
+						$error = 1;
+					}
+				}
+				
+				$elementnum++;
+			}
+
+			print_r($_POST);
+			print_r($settings);
+			print_r($errornum);
+			
+			if ($error == 1) {
+				$settings = $this->generateTags($settings);
+				foreach ($errornum as $num) {
+					$settings[$num]['tag'] .= ' <div class="form_error">Required field</div>';
+				}
+				$this->showForm($item->itemid, $settings, $extra);
+			} else {
+				//process sendmail here
+			}
+
+		}
+
+		
+
+
+
+
+
 		/*
 		//Send email message according to a method set on plugin option page. 
 		$method = $this->getOption("method");
 		
-		switch ($method) {
+		switch ($methiod) {
 			case 0:
 				sendMail();
 				break;
@@ -106,22 +161,33 @@ class NP_ContactForm extends NucleusPlugin
 		}
 		*/
 	}
+	
+	// Show Form
+	// Takes form code along with extra stuff to add to the code.
+	// Dislay form. 
+	function showForm($itemid, $settings, $extra)
+	{
+		echo '<form name="contactform" id="contactform" method="post" action="' 
+			 . createItemLink($itemid) . '" onsubmit="return showProcess();">' . "\r\n";
+		
+		echo $this->getFormCode($this->getOption('form'), $settings);
 
-	// clean up user input
-	function clean_var($variable) {
-    	$variable = strip_tags(stripslashes(trim(rtrim($variable))));
-  		return $variable;
+		// Process extra here
+
+		echo '</form>' . "\r\n" 
+			 . '<div id="other" class="hidePane">Processing</div>' . "\r\n" 
+			 . $this->addJs() . "\r\n" 
+			 . $this->addCss() . "\r\n";
 	}
 
-	
-
-	// Show form
-	// Generate HTML code for a contact form based on custom markups entered by a user. 
-	// Return true is succeed.
-	//
-	function showForm($markup, $itemid)
+	// Read Markup
+	// Take cutom markup which user entered in plugin setting page. 
+	// Break it down and store it in an array. 
+	// Convert markup information into tags and add them to the array. 
+	// Returns the array. 
+	function readMarkup($markup)
 	{
-		// Store markup information in an array
+		// Break down markups
 		$settings = array();
 		$a_keys = array('type', 'name', 'required', 'option');
 		preg_match_all('/\[%\(.*%\]/', $markup, $matches);
@@ -138,9 +204,15 @@ class NP_ContactForm extends NucleusPlugin
 				array_push($settings, $setting);	
 			}
 		}
-
-		// Create HTML tag based on markup information
-		// Tags generated are stored in an array along with the markup inforamtion. 
+		$settings = $this->generateTags($settings);
+		return $settings;
+	}
+	
+	// Generate tags based on custom markup information
+	// Take array of markup information and create tags.
+	// Add tags to the array and return it. 
+	function generateTags($settings)
+	{
 		$i = 0;
 		foreach ($settings as $setting) {
 			if ($setting['type'] == 'text') {
@@ -165,7 +237,6 @@ class NP_ContactForm extends NucleusPlugin
 				preg_match_all('/[a-zA-Z0-9]+\|+?[a-zA-Z0-9]+/', $setting['option'], $matches);
 				foreach ($matches[0] as $match) {
 					$option = explode('|', $match);
-					$option = explode('|', $match);
 					$tag .= '<option value="' . $option[1] . '">' . $option[0] . '</option>' . "\r\n";
 				}
 				$tag .= '</select>' . "\r\n";
@@ -181,23 +252,23 @@ class NP_ContactForm extends NucleusPlugin
 			$i++;
 		}
 
+		return $settings;
+	}	
+
+	// getFormCode
+	// Replace custom markups with form elements. 
+	// Return modified code.
+	function getFormCode($markup, $settings)
+	{
 		// Replace custom markups with HTML tags
-		// Add <form> tag to finished product and generate a code for a form.
-		//preg_match_all('/\[%\(.*\)%\]/', $markup, $matches);
-		preg_match_all('/\[%\((\w+),(\w+).*\)%\]/', $markup, $matches);
+		preg_match_all('/\[%\(.*\)%\]/', $markup, $matches);
 		$tags = array();
 		foreach ($settings as $setting) {
 			array_push($tags, $setting['tag']);
 		}
 		$markup = str_replace($matches[0], $tags, $markup);
 
-		$code = '<form name="contactform" id="contactform" method="post" action="'
-		      . createItemLink($itemid) . '" onsubmit="return showProcess();">' . "\r\n";
-		$code .= $markup;
-		$code .= '</form>' . "\r\n"
-			  .  '<div id="other" class="hidePane">Processing</div>' . "\r\n";
-		
-		echo $code . $this->addJs() . $this->addCss() . "\r\n";
+		return $markup;		
 	}
 	
 	// returns JavaScript for displaying 'processing...' message
@@ -236,7 +307,6 @@ EOT;
 					opacity: 0.4;
 					padding-top: 250px;
 					text-align: center;
-					text-decoration: blink;
 					top: 50%;
 					visibility: visible;
 					width: 100%;
@@ -244,11 +314,21 @@ EOT;
 				.hidePane {
 					visibility: hidden;
 				}
+				.form_error {
+					color: #FF0000;
+					display: inline;
+				}
 			</style>
 EOT;
 		return $css;
 	}
-	
+
+	// clean up user input
+	function clean_var($variable) {
+    	$variable = strip_tags(stripslashes(trim(rtrim($variable))));
+  		return $variable;
+	}
+
 	// Validate email
 	// Takes email address and retruns boolean for validity.
 	// Thanks to http://www.easyphpcontactform.com and
