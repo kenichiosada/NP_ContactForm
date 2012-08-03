@@ -80,51 +80,60 @@ class NP_ContactForm extends NucleusPlugin
 	function doItemVar(&$item, $param)
 	{	
 		$settings = $this->readMarkup($this->getOption('form'));
-
 		$error = 0;	
 		$errornum = array();
 
 		if (!isset($_POST['submit'])){	
 			$this->showForm($item->itemid, $settings, $extra);
 		} else {
+
 			$elementnum = 0;
-			
+
 			foreach ($settings as $setting) {
 				$name = $setting['name'];
-				
+
 				// Remove default value from $_POST
 				if ($_POST[$name] == $setting['option']) {
-					unset($_POST[$name]);
-				}
-				
-				// Switch form's default value with user inputs
-				if ($setting['type'] == 'text' || $setting['type'] == 'textarea') {
-					if (array_key_exists($name,$_POST)) {
-						$settings[$elementnum]['option'] = htmlspecialchars($_POST[$name], ENT_QUOTES);
+					if ($name != 'submit' && $name != 'Submit') {
+						$_POST[$name] = '';	
 					}
 				}
-				
+
+				// Grab POST values and sanitize them
+				$value = ($setting['type'] == 'textarea') ? 
+					htmlspecialchars($_POST[$name], ENT_QUOTES) : $this->clean_var($_POST[$name]);
+				$settings[$elementnum]['value'] = $value;
+					
 				// Check for required field
 				if ($setting['required'] == 1) {					
-					if (array_key_exists($name, $_POST) == false) {
-						array_push($errornum, $elementnum);
-						$error = 1;
-					}
+					if ($setting['type'] != 'select') {
+						if (empty($value)) {
+							$error = 1;
+							array_push($errornum, $elementnum);
+						}
+					}	
 				}
+
+				// Switch form's default value with user inputs
+				if ($setting['type'] == 'text' || $setting['type'] == 'textarea') {
+					if (!empty($_POST[$name])) {
+						$settings[$elementnum]['option'] = $value;
+					}
+				} 
 				
 				$elementnum++;
 			}
 
+			// Process form submission
 			if ($error == 1) {
 				$settings = $this->generateTags($settings);
 				foreach ($errornum as $num) {
-					$settings[$num]['tag'] .= ' <div class="form_error">Required field</div>';
+					$settings[$num]['tag'] .= '<div class="form_error">Required field</div>';
 				}
 				$this->showForm($item->itemid, $settings, $extra);
 			} else {
 				//process sendmail here
 			}
-
 		}
 
 		
@@ -209,21 +218,38 @@ class NP_ContactForm extends NucleusPlugin
 		foreach ($settings as $setting) {
 			if ($setting['type'] == 'text') {
 				$tag = '<input type="text" name="' . $setting['name'] . '" id="' . $setting['name'];
-				if (isset($setting['option'])) {
+				if (isset($setting['value'])) {
+					$tag .= '"value= "' . $setting['value'];
+				} else {
 					$tag .= '" value = "' . $setting['option'];
 				}
-				$tag .= '" />';
-			} elseif ($setting['type'] == 'checkbox' || $setting['type'] == 'radio') {
+				$tag .= '" />' . "\r\n";
+			} elseif ($setting['type'] == 'checkbox') {
+				preg_match('/[a-zA-Z0-9\s]+\|+?[a-z-A-Z0-9\s]+/', $setting['option'], $match);
+				$tag = '';
+				$options = explode('|', $match[0]);	
+				$tag .= '<input type="' . $setting['type'] . '" ' 
+						 . 'name="' . $setting['name'] . '" '
+						 . 'id="' . $setting['name'] . '" ' 
+						 . 'value="' . $options[1] . '" ';
+				if ($setting['value'] == $options[1]) {
+					$tag .= 'checked ';
+				}
+				$tag .= ' /> ' . $options[0] . "\r\n";
+			} elseif ($setting['type'] == 'radio') {
 				preg_match_all('/[a-zA-Z0-9\s]+\|+?[a-z-A-Z0-9\s]+/', $setting['option'], $matches);
 				$tag = '';
+				$optid = 1;
 				foreach ($matches[0] as $match) {		
-					$options = explode('|', $match);
-					$optid = 1;
+					$options = explode('|', $match);	
 					$tag .= '<input type="' . $setting['type'] . '" ' 
 						 . 'name="' . $setting['name'] . '" '
 						 . 'id="' . $setting['name'] . $optid . '" ' 
-						 . 'value="' . $options[1] . '" /> ' . $options[0] . "<br />" 
-						 . "\r\n";
+						 . 'value="' . $options[1] . '"';
+				   	if ($setting['value'] == $options[1]) {
+						$tag .= 'checked ';
+					}	
+					$tag .= ' /> ' . $options[0] . "\r\n";
 					$optid++;
 				}
 			} elseif ($setting['type'] == 'select') {
@@ -231,7 +257,13 @@ class NP_ContactForm extends NucleusPlugin
 				preg_match_all('/[a-zA-Z0-9\s]+\|+?[a-zA-Z0-9\s]+/', $setting['option'], $matches);
 				foreach ($matches[0] as $match) {
 					$option = explode('|', $match);
-					$tag .= '<option value="' . $option[1] . '">' . $option[0] . '</option>' . "\r\n";
+					if ($setting['value'] == $option[1]) {
+						$tag .= '<option value="' . $option[1] . '" selected>' 
+							 . $option[0] . '</option>' . "\r\n";
+					} else {
+						$tag .= '<option value="' . $option[1] . '">' 
+							 . $option[0] . '</option>' . "\r\n";
+					}
 				}
 				$tag .= '</select>' . "\r\n";
 			} elseif ($setting['type'] == 'textarea') {
@@ -245,7 +277,6 @@ class NP_ContactForm extends NucleusPlugin
 			$settings[$i] = $setting;
 			$i++;
 		}
-
 		return $settings;
 	}	
 
@@ -310,7 +341,6 @@ EOT;
 				}
 				.form_error {
 					color: #FF0000;
-					display: inline;
 				}
 			</style>
 EOT;
