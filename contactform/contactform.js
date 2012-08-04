@@ -26,16 +26,13 @@ function hideElement() {
 		rows[6].style.display = "none";
 		rows[7].style.display = "none";
 		rows[8].style.display = "none";
-		rows[9].style.display = "none";
 	} else if (selection == 2) {
 		rows[6].style.display = "none";
 		rows[7].style.display = "";
 		rows[8].style.display = "";
-		rows[9].style.display = "";
 	}else{
 		rows[6].style.display = "";
 		rows[7].style.display = "";
 		rows[8].style.display = "";
-		rows[9].style.display = "";
 	}
 }

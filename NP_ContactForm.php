@@ -9,7 +9,22 @@
   * @author     Osada
   * @version    0.1
   *
+  * Usage: 
+  *
+  * [%(text,name,1,)%]
+  * [%(text,email,1,)%]
+  * [%(textarea,message,1,Enter text here)%]
+  * [%(radio,option1,0,option 1|0|option2|1|option3|2)%]
+  * [%(checkbox,check1,0,Choice 1|0)%]
+  * [%(checkbox,check2,0,Choice 2|1)%]
+  * [%(select,selection1,0,Select 1|0|Select 2|1|Select3|2)%]
+  * [%(submit,Submit)%]
+  * 
+  *
  */
+
+require_once ('/contactform/class.phpmailer.php');
+
 
 class NP_ContactForm extends NucleusPlugin
 {
@@ -43,9 +58,9 @@ class NP_ContactForm extends NucleusPlugin
 		// SMTP & Gmail only
 		$this->createOption("username", "Username", "text", "");
 		$this->createOption("password", "Password", "password", "");
-		$this->createOption("debug", "Debug Mode", "yesno");
 		// Form
 		$this->createOption("form", "Form HTML (Enter w/o <form></form>)", "textarea", "");
+		$this->createOption("debug", "Debug mode", "yesno");
 	}
 
 	function uninstall()
@@ -58,8 +73,8 @@ class NP_ContactForm extends NucleusPlugin
 		$this->deleteOption("host");
 		$this->deleteOption("username");
 		$this->deleteOption("password");
-		$this->deleteOption("debug");
 		$this->deleteOption("form");
+		$this->deleteOption("debug");
 	}
 
 	function event_PrePluginOptionsEdit($data)
@@ -80,88 +95,143 @@ class NP_ContactForm extends NucleusPlugin
 	function doItemVar(&$item, $param)
 	{	
 		$settings = $this->readMarkup($this->getOption('form'));
-		$error = 0;	
-		$errornum = array();
-
+		$error = array();
 		if (!isset($_POST['submit'])){	
 			$this->showForm($item->itemid, $settings, $extra);
 		} else {
-
+			// Validate user input
 			$elementnum = 0;
-
 			foreach ($settings as $setting) {
-				$name = $setting['name'];
-
+				$name = $setting['name'];	
 				// Remove default value from $_POST
 				if ($_POST[$name] == $setting['option']) {
 					if ($name != 'submit' && $name != 'Submit') {
 						$_POST[$name] = '';	
 					}
 				}
-
 				// Grab POST values and sanitize them
 				$value = ($setting['type'] == 'textarea') ? 
 					htmlspecialchars($_POST[$name], ENT_QUOTES) : $this->clean_var($_POST[$name]);
 				$settings[$elementnum]['value'] = $value;
-					
 				// Check for required field
 				if ($setting['required'] == 1) {					
 					if ($setting['type'] != 'select') {
 						if (empty($value)) {
-							$error = 1;
-							array_push($errornum, $elementnum);
+							$error['general']['status'] = 1;
+							array_push($error['general']['errornum'], $elementnum);
 						}
 					}	
 				}
-
+				// Validate email address
+				if ($setting['name'] == 'email') {
+					$result = $this->validEmail($setting['value']);
+					if ($result == false) {
+						$error['email']['status'] = 1;
+						array_push($error['email']['errornum'], $elementnum);
+					}
+				}
 				// Switch form's default value with user inputs
 				if ($setting['type'] == 'text' || $setting['type'] == 'textarea') {
 					if (!empty($_POST[$name])) {
 						$settings[$elementnum]['option'] = $value;
 					}
 				} 
-				
 				$elementnum++;
 			}
-
 			// Process form submission
-			if ($error == 1) {
+			if ($error['general']['status'] == 1 || $error['email']['status'] == 1) {
 				$settings = $this->generateTags($settings);
-				foreach ($errornum as $num) {
+				foreach ($error['general']['errornum'] as $num) {
 					$settings[$num]['tag'] .= '<div class="form_error">Required field</div>';
+				}
+				foreach ($error['email']['errornum'] as $num) {
+					$settings[$num]['tag'] .= '<div class="form_error">Not a valid Email address</div>';
 				}
 				$this->showForm($item->itemid, $settings, $extra);
 			} else {
-				//process sendmail here
+				$result = $this->sendMail($settings);
+				if (!$result) {
+					echo "Something wrong";
+				} else {
+					echo "Success";
+				}
 			}
 		}
+	}
 
+	// Send mail
+	// Takes  form settings and send email. 
+	// Return true if succeed.
+	function sendMail($settings)
+	{
+		$mail = new PHPMailer();
 		
+		// Grab common settings
+		$message = '';
+		$email = '';
+		foreach ($settings as $setting) {
+			// Get user's email address if such field exists.
+			if ($setting['type'] == 'text' && $setting['name'] == 'email' && isset($setting['value'])) {
+				$email = $value;	
+			}
+			// Compile a message to be sent.
+			$type = array ('text', 'radio', 'select', 'checkbox');
+			if (!empty($setting['value'])) {
+				if (in_array($setting['type'], $type)) {
+					$message .= $setting['name'] . ": " . $setting['value'] . "\r\n";
+				} elseif ($setting['type'] == 'textarea') {
+					$message .= $setting['name'] . ": \r\n" . $setting['value'] . "\r\n";
+				}
+			}
+		}
+		$mail->SetFrom($this->getOption('from'));
+		$mail->AddAddress($this->getOption('to'));
+		if ($this->getOption('reply') == 'yes' && isset($email)) {
+			$mail->AddReplyTo($email, $email);
+		}
+		$mail->Subject = $this->getOption('subject');
+		$mail->Body = $message;
+		$mail->WordWrap = 100;
 
-
-
-
-
-		/*
-		//Send email message according to a method set on plugin option page. 
+		// Choose which method to use
 		$method = $this->getOption("method");
-		
 		switch ($methiod) {
 			case 0:
-				sendMail();
+				$mail->IsSendmail();	
 				break;
 			case 1:
-				sendSmtp();
+				$mail->Host = $this->getOption('host');
+				$mail->Port = $this->getOption('port');
 				break;
 			case 2:
-				sendGmail();
+				$mail->Host = 'smtp.gmail.com';
+				$mail->SMTPSecure = 'tls';
+				$mail->Port = '587';
 				break;
 			default:
-				sendMail();
+				$mail->IsSendmail();
 				break;
 		}
-		*/
+
+		// Settings for SMTP and Gmail SMTP
+		if ($method == 1 || $method ==2) {
+			$mail->IsSMTP();
+			$mail->SMTPAuth = true;
+			$mail->Username = $this->getOption('username');
+			$mail->Password = $this->getOption('password');
+			$mail->SMTPDebug = 1;
+		}
+
+		if (!$mail->Send()) {
+			if ($this->getOption('debug') == 'yes') {
+				echo $mail->ErrorInfo;
+			}
+			return false;
+		} else {
+			return true;
+		}
 	}
+
 	
 	// Show Form
 	// Takes form code along with extra stuff to add to the code.
@@ -301,6 +371,7 @@ class NP_ContactForm extends NucleusPlugin
 	{
 		$js = <<<EOT
 			<script type="text/javascript">
+				window.onunload = function() {};
 				function showProcess()
 				{
 					document.getElementById("other").className = 
