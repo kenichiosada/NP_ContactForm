@@ -100,7 +100,9 @@ class NP_ContactForm extends NucleusPlugin
 			$this->showForm($item->itemid, $settings, $extra);
 		} else {
 			// Validate user input
-			$elementnum = 0;
+            $elementnum = 0;
+            $emailnum = 0;
+            $generalnum = 0;
 			foreach ($settings as $setting) {
 				$name = $setting['name'];	
 				// Remove default value from $_POST
@@ -118,16 +120,18 @@ class NP_ContactForm extends NucleusPlugin
 					if ($setting['type'] != 'select') {
 						if (empty($value)) {
 							$error['general']['status'] = 1;
-							array_push($error['general']['errornum'], $elementnum);
+                            $error['general']['errornum'][$generalnum] = $elementnum;
+                            $generalnum++;
 						}
 					}	
 				}
 				// Validate email address
 				if ($setting['name'] == 'email') {
-					$result = $this->validEmail($setting['value']);
+                    $result = $this->validEmail($settings[$elementnum]['value']);
 					if ($result == false) {
-						$error['email']['status'] = 1;
-						array_push($error['email']['errornum'], $elementnum);
+                        $error['email']['status'] = 1;
+                        $error['email']['errornum'][$emailnum] = $elementnum;
+                        $emailnum++;
 					}
 				}
 				// Switch form's default value with user inputs
@@ -136,8 +140,9 @@ class NP_ContactForm extends NucleusPlugin
 						$settings[$elementnum]['option'] = $value;
 					}
 				} 
-				$elementnum++;
-			}
+                $elementnum++;
+            }
+            
 			// Process form submission
 			if ($error['general']['status'] == 1 || $error['email']['status'] == 1) {
 				$settings = $this->generateTags($settings);
@@ -151,7 +156,7 @@ class NP_ContactForm extends NucleusPlugin
 			} else {
 				$result = $this->sendMail($settings);
 				if (!$result) {
-					echo "Something wrong";
+                    echo "Something wrong";
 				} else {
 					echo "Success";
 				}
@@ -224,7 +229,7 @@ class NP_ContactForm extends NucleusPlugin
 
 		if (!$mail->Send()) {
 			if ($this->getOption('debug') == 'yes') {
-				echo $mail->ErrorInfo;
+				echo $mail->ErrorInfo . "<br />\r\n";
 			}
 			return false;
 		} else {
