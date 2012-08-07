@@ -7,7 +7,7 @@
   * It let you select mail sending method from sendmail, 3rd party SMTP, or Gmail. 
   *
   * @author     Osada
-  * @version    0.1
+  * @version    0.2.0
   *
   * Usage: 
   *
@@ -94,9 +94,25 @@ class NP_ContactForm extends NucleusPlugin
 	
 	function doItemVar(&$item, $param)
 	{	
-		$settings = $this->readMarkup($this->getOption('form'));
+        global $itemid;
+        
+        // Initiate session
+        if (session_id() == '') {
+            session_start();
+        }
+        if (!isset($_SESSION['initiated']))
+        {
+            session_regenerate_id();
+            $_SESSION['initiated'] = true;
+        }
+        
+        $settings = $this->readMarkup($this->getOption('form'));
 		$error = array();
-		if (!isset($_POST['submit'])){	
+        
+        if (!isset($_POST['submit'])){	
+            if (!isset($_SESSION['key'])) {
+                $this->setSessionKey();
+            }
 			$this->showForm($item->itemid, $settings, $extra);
 		} else {
 			// Validate user input
@@ -152,14 +168,23 @@ class NP_ContactForm extends NucleusPlugin
 				foreach ($error['email']['errornum'] as $num) {
 					$settings[$num]['tag'] .= '<div class="form_error">Not a valid Email address</div>';
 				}
-				$this->showForm($item->itemid, $settings, $extra);
-			} else {
-				$result = $this->sendMail($settings);
-				if (!$result) {
-                    echo "Something wrong";
-				} else {
-					echo "Success";
-				}
+                $this->setSessionKey();
+                $this->showForm($item->itemid, $settings, $extra);
+            } else {
+                if ($_SESSION['key'] == $_POST['key']) {
+				    $result = $this->sendMail($settings);
+				    if (!$result) {
+                        echo '<p>Email was not sent for some reason.</p>';
+                        echo '<p><a href="">Return to a contact form.</a></p>';
+				    } else {
+                        echo "<p>Thank you for your message.</p>";
+                        $_SESSION['key'] = md5(mt_rand());
+				    }
+                } else {
+                    session_unset();
+                    session_destroy();
+                    header('Location: ' . $_SERVER['PHP_SELF'] . '?itemid=' . $itemid);
+                }
 			}
 		}
 	}
@@ -173,11 +198,11 @@ class NP_ContactForm extends NucleusPlugin
 		
 		// Grab common settings
 		$message = '';
-		$email = '';
+        $email = '';
 		foreach ($settings as $setting) {
 			// Get user's email address if such field exists.
 			if ($setting['type'] == 'text' && $setting['name'] == 'email' && isset($setting['value'])) {
-				$email = $value;	
+                $email = $setting['value']; 
 			}
 			// Compile a message to be sent.
 			$type = array ('text', 'radio', 'select', 'checkbox');
@@ -185,10 +210,11 @@ class NP_ContactForm extends NucleusPlugin
 				if (in_array($setting['type'], $type)) {
 					$message .= $setting['name'] . ": " . $setting['value'] . "\r\n";
 				} elseif ($setting['type'] == 'textarea') {
-					$message .= $setting['name'] . ": \r\n" . $setting['value'] . "\r\n";
+					$message .= "\r\n" . $setting['name'] . ": \r\n" . $setting['value'] . "\r\n\r\n";
 				}
-			}
-		}
+            }
+        }
+
 		$mail->SetFrom($this->getOption('from'));
 		$mail->AddAddress($this->getOption('to'));
 		if ($this->getOption('reply') == 'yes' && isset($email)) {
@@ -200,7 +226,7 @@ class NP_ContactForm extends NucleusPlugin
 
 		// Choose which method to use
 		$method = $this->getOption("method");
-		switch ($methiod) {
+		switch ($method) {
 			case 0:
 				$mail->IsSendmail();	
 				break;
@@ -210,8 +236,8 @@ class NP_ContactForm extends NucleusPlugin
 				break;
 			case 2:
 				$mail->Host = 'smtp.gmail.com';
-				$mail->SMTPSecure = 'tls';
-				$mail->Port = '587';
+                $mail->SMTPSecure = 'ssl';
+				$mail->Port = '465';
 				break;
 			default:
 				$mail->IsSendmail();
@@ -237,7 +263,14 @@ class NP_ContactForm extends NucleusPlugin
 		}
 	}
 
-	
+    // Set session key
+    function setSessionKey()
+    {
+        if (!isset($_SESSION['key'])) {
+            $_SESSION['key'] = md5(mt_rand());
+        }
+    }
+
 	// Show Form
 	// Takes form code along with extra stuff to add to the code.
 	// Dislay form. 
@@ -248,7 +281,7 @@ class NP_ContactForm extends NucleusPlugin
 		
 		echo $this->getFormCode($this->getOption('form'), $settings);
 
-		// Process extra here
+		echo '<input type="hidden" name="key" value="' . $_SESSION['key'] . '" />' . "\r\n";
 
 		echo '</form>' . "\r\n" 
 			 . '<div id="other" class="hidePane">Processing</div>' . "\r\n" 
